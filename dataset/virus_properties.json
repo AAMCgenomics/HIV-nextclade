@@ -3,6 +3,9 @@
     "nucMutLabelMap": {},
     "nucMutLabelMapReverse": {},
     "alignmentParams": {
+      "gap-open-penalty": 12,
+      "gap-open-penalty-in-frame": 10,
+      "gap-open-penalty-out-of-frame": 14,
       "excess_bandwidth": 50,
       "terminal_bandwidth": 50,
       "kmer_length": 10,

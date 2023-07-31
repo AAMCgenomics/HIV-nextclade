@@ -24,10 +24,12 @@
     "mixedSitesThreshold": 50
   },
   "frameShifts": {
-    "enabled": true
+    "enabled": true,
+    "scoreWeight":10
   },
   "stopCodons": {
     "enabled": true,
-    "ignoredStopCodons": []
+    "ignoredStopCodons": [],
+    "scoreWeight":20
   }
 }
