@@ -6,6 +6,23 @@ genes = ["pro", "RT-p66", "RT-p51", "INT",
 
 ruleorder: group_trees>tree
 
+rule assemble:
+    input:
+        "config/reference.fasta",
+        "config/annotation.gff",
+        "config/tag.json",
+        "config/qc.json",
+        "config/primers.csv",
+        "config/virus_properties.json",
+        "results/tree.json"
+    output:
+        directory("dataset")
+    shell:
+        """
+        mkdir -p {output}
+        cp {input} {output}
+        """
+
 rule name_by_accession:
     input:
         "data/sequences.fasta",
