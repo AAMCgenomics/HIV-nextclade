@@ -48,17 +48,27 @@ rule align:
         ref = "config/reference.fasta",
         annotation = "config/annotation.gff"
     output:
-        "results/alignment.fasta"
+        alignment = "results/alignment.fasta",
+        translations = expand("results/translation_{gene}.fasta", gene=genes)
     params:
         translations = lambda w:"results/translation_{gene}.fasta"
-    threads: 84
+    threads: 4
     shell:
         """
-        ./nextalign run -j {threads} -r {input.ref} -m {input.annotation} --output-fasta {output} --output-translations {params.translations} \\
-                        --output-insertions results/insertions.csv --include-reference --gap-alignment-side right \\
-                        --penalty-gap-open 12 --penalty-gap-open-out-of-frame 14 --penalty-gap-open-in-frame 10 \\
+        ../nextclade_dev/target/release/nextclade run -j {threads} -D boot_strap_dataset \
+                        --output-fasta {output.alignment} --output-translations {params.translations} \
+                        --output-insertions results/insertions.csv --include-reference \
                         {input.sequences}
         """
+
+
+
+        # """
+        # ./nextalign run -j {threads} -r {input.ref} -m {input.annotation} --output-fasta {output} --output-translations {params.translations} \\
+        #                 --output-insertions results/insertions.csv --include-reference --gap-alignment-side right \\
+        #                 --penalty-gap-open 12 --penalty-gap-open-out-of-frame 14 --penalty-gap-open-in-frame 10 \\
+        #                 {input.sequences}
+        # """
 
 rule make_metadata:
     input:
@@ -225,4 +235,11 @@ rule export:
         """
         augur export v2 --tree {input.tree} --node-data {input.node_data} \
                         --auspice-config {input.auspice_config} --output {output} --minify-json
+        """
+
+rule clean:
+    shell:
+        """
+        rm -rf results
+        rm -r dataset/tree.json
         """
