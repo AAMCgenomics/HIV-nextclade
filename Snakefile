@@ -4,16 +4,12 @@ genes = ["pro", "RT-p66", "RT-p51", "INT",
          "vif", "vpr", "tat",  "rev", "vpu",
          "gp120", "gp41", "nef"]
 
-ruleorder: group_trees>tree
 
 rule assemble:
     input:
         "config/reference.fasta",
-        "config/annotation.gff",
-        "config/tag.json",
-        "config/qc.json",
-        "config/primers.csv",
-        "config/virus_properties.json",
+        "config/genome_annotation.gff3",
+        "config/pathogen.json",
         "results/tree.json"
     output:
         directory("dataset")
@@ -24,6 +20,7 @@ rule assemble:
         """
 
 rule name_by_accession:
+    message: """renaming sequences by accession"""
     input:
         "data/sequences.fasta",
         "data/additional.fasta"
@@ -43,34 +40,40 @@ rule name_by_accession:
                     SeqIO.write(record, f, "fasta")
 
 rule align:
+    message: """aligning sequences to the reference using nextclade v3"""
     input:
         sequences = "data/sequences_renamed.fasta",
         ref = "config/reference.fasta",
-        annotation = "config/annotation.gff"
+        annotation = "config/genome_annotation.gff3",
+        pjson = "config/pathogen.json"
     output:
         alignment = "results/alignment.fasta",
         translations = expand("results/translation_{gene}.fasta", gene=genes)
     params:
-        translations = lambda w:"results/translation_{gene}.fasta"
+        translations = lambda w:"results/translation_{cds}.fasta"
     threads: 4
     shell:
         """
-        ../nextclade_dev/target/release/nextclade run -j {threads} -D boot_strap_dataset \
-                        --output-fasta {output.alignment} --output-translations {params.translations} \
-                        --output-insertions results/insertions.csv --include-reference \
-                        {input.sequences}
+        nextclade3 run -j {threads} --input-ref {input.ref} \
+                   --input-pathogen-json {input.pjson} --input-annotation {input.annotation} \
+                   --output-fasta {output.alignment} --output-translations {params.translations} \
+                   --include-reference --output-csv results/nextclade.csv  \
+                   {input.sequences}
         """
 
-
-
-        # """
-        # ./nextalign run -j {threads} -r {input.ref} -m {input.annotation} --output-fasta {output} --output-translations {params.translations} \\
-        #                 --output-insertions results/insertions.csv --include-reference --gap-alignment-side right \\
-        #                 --penalty-gap-open 12 --penalty-gap-open-out-of-frame 14 --penalty-gap-open-in-frame 10 \\
-        #                 {input.sequences}
-        # """
+rule mask_for_tree:
+    input:
+        sequences = "results/alignment.fasta",
+        mask = "config/mask_for_tree.fasta"
+    output:
+        masked = "results/alignment.fasta"
+    shell:
+        """
+        augur mask --mask {input.mask} --sequences {input.sequences} --output {output.masked}
+        """
 
 rule make_metadata:
+    message: """pull metadata from description of sequences"""
     input:
         "data/sequences.fasta", "data/additional.fasta"
     output:
@@ -103,10 +106,11 @@ rule make_metadata:
 
 rule split_by_subtype:
     input:
-        alignment = "results/alignment.fasta",
+        alignment = "results/masked.fasta",
         metadata = "results/metadata.tsv"
     output:
-        alignments = directory("results/subtype_alignments")
+        alignments = directory("results/subtype_alignments"),
+        touch_file = 'results/subtype_aligments/touch_file'
     run:
         import pandas as pd
         import os
@@ -119,63 +123,46 @@ rule split_by_subtype:
                 for record in SeqIO.parse(input.alignment, "fasta"):
                     if metadata.loc[record.id,'subtype'] == subtype:
                         SeqIO.write(record, f, "fasta")
-
+        os.system('touch '+output.touch_file)
 
 rule trees_by_subtype:
     input:
-        alignments = directory("results/subtype_alignments"),
+        touch_file = "results/subtype_aligments/touch_file"
     output:
-        trees = directory("results/subtype_trees")
+        trees = directory("results/subtype_trees"),
+        touch_file = "results/subtype_trees/touch_file"
+    params:
+        alignments = "results/subtype_alignments"
     shell:
         """
         mkdir -p {output.trees}
-        for f in {input.alignments}/*.fasta; do
+        for f in {params.alignments}/*.fasta; do
             augur tree --alignment $f --output {output.trees}/$(basename $f .fasta).nwk
         done
+        touch {output.touch_file}
         """
 
 rule group_trees:
+    message: """collect all trees and attach them as children to one large polytomy"""
     input:
-        trees = directory("results/subtype_trees"),
+        touch_file = "results/subtype_trees/touch_file"
     output:
         "results/tree_raw.nwk"
+    params:
+        trees = "results/subtype_trees"
     run:
         from Bio import Phylo
         import glob
 
 
         T = Phylo.BaseTree.Tree()
-        for t in glob.glob(input.trees + "/*.nwk"):
+        for t in glob.glob(params.trees + "/*.nwk"):
             sub_tree = Phylo.read(t, "newick")
             sub_tree.root_at_midpoint()
             sub_tree.root.branch_length = 0.1
             T.root.clades.append(sub_tree.root)
         Phylo.write(T, output[0], "newick")
 
-
-
-
-rule splice_alignment_for_tree:
-    input:
-        "results/alignment.fasta"
-    output:
-        "results/alignment_spliced.fasta"
-    run:
-        from Bio import SeqIO
-        with open(output[0], "w") as f:
-            for record in SeqIO.parse(input[0], "fasta"):
-                record.seq = record.seq[1798:3415]
-                SeqIO.write(record, f, "fasta")
-
-rule tree:
-    input:
-        aln = "results/alignment_spliced.fasta"
-    output:
-        tree = "results/tree_raw.nwk"
-    shell:
-        """
-        augur tree --alignment {input.aln} --output {output.tree}
-        """
 
 rule refine:
     input:
@@ -209,7 +196,7 @@ rule ancestral:
         aln = "results/alignment.fasta",
         translations = expand("results/translation_{gene}.fasta", gene=genes),
         root = "config/reference.fasta",
-        annotation = "config/annotation.json"
+        annotation = "config/reference.gb"
     output:
         node_data="results/muts.json"
     params:
