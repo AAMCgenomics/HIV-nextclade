@@ -10,6 +10,8 @@ rule assemble:
         "config/reference.fasta",
         "config/genome_annotation.gff3",
         "config/pathogen.json",
+        "config/CHANGELOG.md",
+        "config/README.md",
         "results/tree.json"
     output:
         directory("dataset")
@@ -19,11 +21,12 @@ rule assemble:
         cp {input} {output}
         """
 
+subtypes_to_exclude = ['U', 'UO', 'O','N', 'P', 'CPZ', 'GOR']
+
 rule name_by_accession:
     message: """renaming sequences by accession"""
     input:
-        "data/sequences.fasta",
-        "data/additional.fasta"
+        "data/HIV1_SFL_2021_genome_DNA.fasta"
     output:
         "data/sequences_renamed.fasta"
     run:
@@ -32,11 +35,15 @@ rule name_by_accession:
         with open(output[0], "w") as f:
             for fname in input:
                 for record in SeqIO.parse(fname, "fasta"):
+                    subtype = record.id.split(".")[0]
                     record.id = record.id.split(".")[-1]
                     if record.id in accessions:
                         continue
+                    if subtype in subtypes_to_exclude:
+                        continue
                     accessions.add(record.id)
                     record.description = ""
+                    record.seq = record.seq.replace('-', '')
                     SeqIO.write(record, f, "fasta")
 
 rule align:
@@ -64,9 +71,9 @@ rule align:
 rule mask_for_tree:
     input:
         sequences = "results/alignment.fasta",
-        mask = "config/mask_for_tree.fasta"
+        mask = "config/mask_for_tree.bed"
     output:
-        masked = "results/alignment.fasta"
+        masked = "results/masked.fasta"
     shell:
         """
         augur mask --mask {input.mask} --sequences {input.sequences} --output {output.masked}
@@ -75,22 +82,24 @@ rule mask_for_tree:
 rule make_metadata:
     message: """pull metadata from description of sequences"""
     input:
-        "data/sequences.fasta", "data/additional.fasta"
+        "data/HIV1_SFL_2021_genome_DNA.fasta"
     output:
         "results/metadata.tsv"
     run:
         from Bio import SeqIO
         import pandas as pd
         metadata = [{'strain':'NC_001802','subtype':'B', 'country':'FR', 'date':1983, 'accession':'NC_001802', 'name':"HXB2_reference"}]
-        fields = {'strain': -1, 'subtype': 1, 'country': 2, 'date': 3, 'accession': -1,  'name': [4,-1]}
+        fields = {'strain': -1, 'subtype': 0, 'country': 1, 'date': 2, 'accession': -1,  'name': [3, -1]}
         accessions = {metadata[0]['strain']}
         for fname in input:
             for record in SeqIO.parse(fname, "fasta"):
                 entries = record.id.split(".")
-                if len(entries)<6:
+                if len(entries)<5:
                     print(entries)
                     continue
                 datum = {k: entries[v] if type(v)==int else '.'.join(entries[v[0]:v[1]]) for k, v in fields.items()}
+                if datum['subtype'] in subtypes_to_exclude:
+                    continue
                 try:
                     if datum['date']< '30':
                         datum['date'] = 2000 + int(datum['date'])
@@ -104,33 +113,45 @@ rule make_metadata:
                 metadata.append(datum)
         pd.DataFrame(metadata).to_csv(output[0], sep='\t', index=False)
 
+max_count = 50
 rule split_by_subtype:
     input:
         alignment = "results/masked.fasta",
         metadata = "results/metadata.tsv"
     output:
         alignments = directory("results/subtype_alignments"),
-        touch_file = 'results/subtype_aligments/touch_file'
+        touch_file = 'results/subtype_alignments_touch_file'
     run:
         import pandas as pd
         import os
         from Bio import SeqIO
         os.makedirs(output.alignments)
+        from collections import defaultdict
+        alignments_by_subtype = defaultdict(list)
         metadata = pd.read_csv(input.metadata, sep='\t', index_col='strain')
-        for subtype, count in metadata.subtype.value_counts().items():
-            if count<3: continue
+        for record in SeqIO.parse(input.alignment, "fasta"):
+            try:
+                subtype = metadata.loc[record.id,'subtype']
+                alignments_by_subtype[subtype].append(record)
+            except KeyError:
+                print(record.id, 'not found')
+
+        for subtype, seqs in alignments_by_subtype.items():
+            if len(seqs)<3: continue
             with open(output.alignments + f"/{subtype}.fasta", "w") as f:
-                for record in SeqIO.parse(input.alignment, "fasta"):
-                    if metadata.loc[record.id,'subtype'] == subtype:
-                        SeqIO.write(record, f, "fasta")
+                if len(seqs)<max_count:
+                    SeqIO.write(seqs, f, "fasta")
+                else:
+                    SeqIO.write(seqs[:max_count], f, "fasta")
+
         os.system('touch '+output.touch_file)
 
 rule trees_by_subtype:
     input:
-        touch_file = "results/subtype_aligments/touch_file"
+        touch_file = "results/subtype_alignments_touch_file"
     output:
         trees = directory("results/subtype_trees"),
-        touch_file = "results/subtype_trees/touch_file"
+        touch_file = "results/subtype_trees_touch_file"
     params:
         alignments = "results/subtype_alignments"
     shell:
@@ -145,7 +166,7 @@ rule trees_by_subtype:
 rule group_trees:
     message: """collect all trees and attach them as children to one large polytomy"""
     input:
-        touch_file = "results/subtype_trees/touch_file"
+        touch_file = "results/subtype_trees_touch_file"
     output:
         "results/tree_raw.nwk"
     params:
@@ -210,18 +231,42 @@ rule ancestral:
                         --output-node-data {output.node_data}
         """
 
+rule add_metadata:
+    input:
+        tree = "results/tree.nwk",
+        metadata = "results/metadata.tsv"
+    output:
+        "results/node_metadata.json"
+    run:
+        import pandas as pd
+        import json
+        from Bio import Phylo   
+        metadata = pd.read_csv(input.metadata, sep='\t', index_col='strain')
+        metadata = metadata.to_dict(orient='index')
+        T = Phylo.read(input.tree, "newick")
+        nodes = {}
+        for node in T.get_terminals():
+            nodes[node.name] = {k1:metadata.get(node.name)[k2] for k1,k2 in 
+                                zip(['country', 'date', 'subtype', 'Strain_name'], 
+                                    ['country', 'date', 'subtype', 'name'])}
+        with open(output[0], "w") as f:
+            json.dump({"nodes":nodes}, f)
+
+
 rule export:
     input:
         tree = "results/tree.nwk",
         node_data = ["results/branch_lengths.json", "results/clades.json",
-                     "results/muts.json"],
-        auspice_config = "config/auspice_config.json"
+                     "results/muts.json", "results/node_metadata.json"],
+        auspice_config = "config/auspice_config.json",
+        metadata = "results/metadata.tsv"
     output:
         "results/tree.json"
     shell:
         """
-        augur export v2 --tree {input.tree} --node-data {input.node_data} \
-                        --auspice-config {input.auspice_config} --output {output} --minify-json
+        augur export v2 --tree {input.tree} --node-data {input.node_data} --metadata {input.metadata} \
+                        --auspice-config {input.auspice_config} --output {output} --minify-json \
+                        --include-root-sequence-inline
         """
 
 rule clean:
