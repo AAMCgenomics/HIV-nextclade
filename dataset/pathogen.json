@@ -17,11 +17,11 @@
       "web": "3.0.0-alpha.0"
     },
     "placementMaskRanges":[
-      {"begin":0, "end":360},
-      {"begin":5780, "end":5840},
+      {"begin":0, "end":336},
+      {"begin":5780, "end":5870},
       {"begin":6160, "end":6240},
       {"begin":6940, "end":7020},
-      {"begin":8960, "end":9180}
+      {"begin":8963, "end":9181}
     ],
     "deprecated": false,
     "enabled": true,
@@ -51,11 +51,11 @@
         "mixedSitesThreshold": 40
       },
       "privateMutations": {
-        "cutoff": 1000,
-        "enabled": false,
-        "typical": 500,
-        "weightLabeledSubstitutions": 6,
-        "weightReversionSubstitutions": 6,
+        "cutoff": 500,
+        "enabled": true,
+        "typical": 300,
+        "weightLabeledSubstitutions": 1,
+        "weightReversionSubstitutions": 1,
         "weightUnlabeledSubstitutions": 1
       },
       "stopCodons": {
