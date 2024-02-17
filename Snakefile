@@ -12,13 +12,15 @@ rule assemble:
         "config/pathogen.json",
         "config/CHANGELOG.md",
         "config/README.md",
-        "results/tree.json"
+        "results/tree.json",
+        "results/example_sequences.fasta"
     output:
         directory("dataset")
     shell:
         """
         mkdir -p {output}
         cp {input} {output}
+        mv dataset/example_sequences.fasta dataset/sequences.fasta
         """
 
 subtypes_to_exclude = ['U', 'UO', 'O','N', 'P', 'CPZ', 'GOR']
@@ -136,15 +138,58 @@ rule split_by_subtype:
             except KeyError:
                 print(record.id, 'not found')
 
-        for subtype, seqs in alignments_by_subtype.items():
-            if len(seqs)<3: continue
-            with open(output.alignments + f"/{subtype}.fasta", "w") as f:
-                if len(seqs)<max_count:
-                    SeqIO.write(seqs, f, "fasta")
-                else:
-                    SeqIO.write(seqs[:max_count], f, "fasta")
+        from random import shuffle
+        with open(output.examples, "w") as f_examples:
+            for subtype, seqs in alignments_by_subtype.items():
+                if len(seqs)<3: continue
+                shuffle(seqs)
+                with open(output.alignments + f"/{subtype}.fasta", "w") as f:
+                    if len(seqs)<max_count:
+                        SeqIO.write(seqs, f, "fasta")
+                        SeqIO.write(seqs[0], f_examples, "fasta")
+                    else:
+                        SeqIO.write(seqs[:max_count], f, "fasta")
+                        SeqIO.write(seqs[max_count:max_count+3], f_examples, "fasta")
 
         os.system('touch '+output.touch_file)
+
+
+rule make_examples:
+    input:
+        sequences = "data/sequences_renamed.fasta",
+        metadata = "results/metadata.tsv",
+        tree = "results/tree.nwk",
+    output:
+        examples = 'results/example_sequences.fasta'
+    run:
+        import pandas as pd
+        import os
+        from Bio import SeqIO, Phylo
+        from collections import defaultdict
+        sequences_by_subtype = defaultdict(list)
+        tips = set([n.name for n in Phylo.read(input.tree, "newick").get_terminals()])
+        metadata = pd.read_csv(input.metadata, sep='\t', index_col='strain')
+        for record in SeqIO.parse(input.sequences, "fasta"):
+            if record.id in tips:
+                continue
+            try:
+                mdata = metadata.loc[record.id].to_dict()
+                subtype = mdata['subtype']
+                record.id = f"{subtype}.{mdata['country']}.{mdata['date']}.{mdata['name']}.{record.id}"
+                sequences_by_subtype[subtype].append(record)
+            except KeyError:
+                print(record.id, 'not found')
+
+        from random import shuffle
+        with open(output.examples, "w") as f_examples:
+            for subtype, seqs in sequences_by_subtype.items():
+                if len(seqs)<2: continue
+                shuffle(seqs)
+                if len(seqs)<max_count:
+                    SeqIO.write(seqs[0], f_examples, "fasta")
+                else:
+                    SeqIO.write(seqs[:5], f_examples, "fasta")
+
 
 rule trees_by_subtype:
     input:
