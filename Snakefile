@@ -28,18 +28,23 @@ subtypes_to_exclude = ['U', 'UO', 'O','N', 'P', 'CPZ', 'GOR']
 rule name_by_accession:
     message: """renaming sequences by accession"""
     input:
-        "data/HIV1_SFL_2021_genome_DNA.fasta"
+        sequences=["data/HIV1_SFL_2021_genome_DNA.fasta"],
+        exclude = "config/exclude.txt"
     output:
         "data/sequences_renamed.fasta"
     run:
         from Bio import SeqIO
-        accessions = set()
+        to_exclude = set()
+        accessions = set()  
+        with open(input.exclude) as f:
+            for line in f:
+                to_exclude.add(line.strip())
         with open(output[0], "w") as f:
-            for fname in input:
+            for fname in input.sequences:
                 for record in SeqIO.parse(fname, "fasta"):
                     subtype = record.id.split(".")[0]
                     record.id = record.id.split(".")[-1]
-                    if record.id in accessions:
+                    if record.id in accessions or record.id in to_exclude:
                         continue
                     if subtype in subtypes_to_exclude:
                         continue
@@ -116,6 +121,7 @@ rule make_metadata:
         pd.DataFrame(metadata).to_csv(output[0], sep='\t', index=False)
 
 max_count = 50
+min_count = 5
 rule split_by_subtype:
     input:
         alignment = "results/masked.fasta",
@@ -139,18 +145,19 @@ rule split_by_subtype:
                 print(record.id, 'not found')
 
         from random import shuffle
-        with open(output.examples, "w") as f_examples:
-            for subtype, seqs in alignments_by_subtype.items():
-                if len(seqs)<3: continue
-                shuffle(seqs)
-                with open(output.alignments + f"/{subtype}.fasta", "w") as f:
-                    if len(seqs)<max_count:
-                        SeqIO.write(seqs, f, "fasta")
-                        SeqIO.write(seqs[0], f_examples, "fasta")
-                    else:
-                        SeqIO.write(seqs[:max_count], f, "fasta")
-                        SeqIO.write(seqs[max_count:max_count+3], f_examples, "fasta")
+        others = open("results/subtype_alignments/other.fasta", "w")
+        for subtype, seqs in alignments_by_subtype.items():
+            shuffle(seqs)
+            if len(seqs)<min_count:
+                SeqIO.write(seqs[0], others, "fasta")
+                continue
 
+            with open(output.alignments + f"/{subtype}.fasta", "w") as f:
+                if len(seqs)<max_count:
+                    SeqIO.write(seqs, f, "fasta")
+                else:
+                    SeqIO.write(seqs[:max_count], f, "fasta")
+        others.close()
         os.system('touch '+output.touch_file)
 
 
@@ -215,19 +222,13 @@ rule group_trees:
     output:
         "results/tree_raw.nwk"
     params:
-        trees = "results/subtype_trees"
-    run:
-        from Bio import Phylo
-        import glob
+        trees = "results/subtype_trees",
+        aln = "results/subtype_alignments"
+    shell:
+        """
+        python3 scripts/make_global_tree.py --tree-dir {params.trees} --alignment-dir {params.aln} --output {output}
+        """
 
-
-        T = Phylo.BaseTree.Tree()
-        for t in glob.glob(params.trees + "/*.nwk"):
-            sub_tree = Phylo.read(t, "newick")
-            sub_tree.root_at_midpoint()
-            sub_tree.root.branch_length = 0.1
-            T.root.clades.append(sub_tree.root)
-        Phylo.write(T, output[0], "newick")
 
 
 rule refine:
@@ -292,7 +293,7 @@ rule add_metadata:
         nodes = {}
         for node in T.get_terminals():
             nodes[node.name] = {k1:metadata.get(node.name)[k2] for k1,k2 in 
-                                zip(['country', 'date', 'subtype', 'Strain_name'], 
+                                zip(['country', 'date', 'LANL_subtype', 'Strain_name'], 
                                     ['country', 'date', 'subtype', 'name'])}
         with open(output[0], "w") as f:
             json.dump({"nodes":nodes}, f)

@@ -9,16 +9,27 @@ if __name__=="__main__":
     parser.add_argument('--tree', type=str, help='Newick tree file')
     parser.add_argument('--metadata', type=str, help='metadata file with subtype information')
     parser.add_argument('--output', type=str, help='output file')
+    parser.add_argument('--min-count', type=int, help='subtypes to ignore if they have fewer than this many samples', default=5)
     args = parser.parse_args()
 
     tree = Phylo.read(args.tree, 'newick')
     metadata = pd.read_csv(args.metadata, sep='\t', index_col=0)
 
     node_to_subtype = {x.Index: x.subtype for x in metadata.itertuples()}
-    nodes_by_subtype = defaultdict(list)
+    nodes_by_subtype_all = defaultdict(list)
 
     for node in tree.get_terminals():
-        nodes_by_subtype[node_to_subtype[node.name]].append(node)
+        nodes_by_subtype_all[node_to_subtype[node.name]].append(node)
+
+    nodes_by_subtype = defaultdict(list)
+    for subtype, nodes in nodes_by_subtype_all.items():
+        if len(nodes) >= args.min_count:
+            nodes_by_subtype[subtype] = nodes
+        else:
+            nodes_by_subtype['other'].extend(nodes)
+
+    for node in nodes_by_subtype['other']:
+        node_to_subtype[node.name] = 'other'
 
     clade_demarcations = {}
     for subtype, nodes in nodes_by_subtype.items():
@@ -31,7 +42,7 @@ if __name__=="__main__":
         clade_demarcations[subtype].clade_label = subtype
 
     for node in tree.find_clades(order = 'preorder'):
-        node.clade = 'unassigned'
+        node.clade = 'other'
 
     for node in tree.find_clades(order = 'preorder'):
         if hasattr(node, "clade_label"):
