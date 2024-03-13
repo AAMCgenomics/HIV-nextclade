@@ -51,11 +51,11 @@
         "mixedSitesThreshold": 40
       },
       "privateMutations": {
-        "cutoff": 600,
+        "cutoff": 700,
         "enabled": true,
-        "typical": 500,
+        "typical": 600,
         "weightLabeledSubstitutions": 1,
-        "weightReversionSubstitutions": 1,
+        "weightReversionSubstitutions": 2,
         "weightUnlabeledSubstitutions": 1
       },
       "stopCodons": {

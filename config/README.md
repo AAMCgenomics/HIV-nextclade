@@ -1,16 +1,21 @@
-# HIV-1 group M subtype classification
+# EXPERIMENTAL: HIV-1 group M subtype and CRF classification
 
 | Key                    | Value                                                                                                               |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------|
-| authors                | [Richard Neher](https://neherlab.org), Thomas Leitner (LANL), [Nextstrain](https://nextstrain.org)                  |
+| authors                | [Richard Neher (U Basel)](https://neherlab.org), [Thomas Leitner (LANL)](https://public.lanl.gov/tkl/)              |
 | data source            | LANL database and Genbank                                                                                           |
 | workflow               | [github.com/neherlab/HIV-nextclade](https://github.com/neherlab/HIV-nextclade)                                      |
 | nextclade dataset path | neherlab/HIV-1                                                                                                      |
 | reference              | [NC_001802](https://www.ncbi.nlm.nih.gov/nuccore/NC_001802)                                                         |
 
-The subtype classification is based on the [2021 Super filtered Alignment](https://www.hiv.lanl.gov/content/sequence/NEWALIGN/help.html#filter) from LANL.
- 
+This Nextclade data set aligns sequences to the HXB2 reference and finds the closest match in a reference tree build from the [2021 Super filtered Alignment](https://www.hiv.lanl.gov/content/sequence/NEWALIGN/help.html#filter) provided by LANL.
+Due to extensive recombination in HIV-1 group M, the tree is not a proper phylogenetic tree, but a collection of trees inferred for each subtype or recombinant form. These individuals trees are then grafted together. Rare CRFs, URFs, or subtypes represented less then 3 times in the reference alignment are labeled as subtype `other`.
 
+Note that the classification is **EXPERIMENTAL** and might be unreliable for sequences that lack a close representative in the tree. 
+The closeness to sequences in the reference set is quantified by the `private mutations` 
+As a general guide, the more private mutations a sequence has, the less reliable the subtype assignment will be. 
+
+Note that alignments of sequences that are far from the subtype B HXB2 reference will have 
 
 ## Reference sequence HXB2 (NC_001802)
 
@@ -26,3 +31,5 @@ There are multiple regions in the HIV-1 genome where deletions and insertions ar
  - Positions 6160 until 6240 in `gp120`. 
  - Position 6940 unitl 7020 in `gp120`.
  - The 5' LTR from end of `nef` (positions 9863 until the end of the genome)
+
+

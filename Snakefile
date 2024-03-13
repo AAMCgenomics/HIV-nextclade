@@ -15,15 +15,17 @@ rule assemble:
         "results/tree.json",
         "results/example_sequences.fasta"
     output:
-        directory("dataset")
+        out_dir = directory("dataset"),
+        tree = "dataset/tree.json"
     shell:
         """
-        mkdir -p {output}
-        cp {input} {output}
+        mkdir -p {output.out_dir}
+        cp {input} {output.out_dir}
         mv dataset/example_sequences.fasta dataset/sequences.fasta
         """
 
 subtypes_to_exclude = ['U', 'UO', 'O','N', 'P', 'CPZ', 'GOR']
+subtypes_to_include = ['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'B', 'C', 'D', 'F1', 'F2', 'G', 'H', 'J', 'K', 'L']
 
 rule name_by_accession:
     message: """renaming sequences by accession"""
@@ -46,12 +48,11 @@ rule name_by_accession:
                     record.id = record.id.split(".")[-1]
                     if record.id in accessions or record.id in to_exclude:
                         continue
-                    if subtype in subtypes_to_exclude:
-                        continue
-                    accessions.add(record.id)
-                    record.description = ""
-                    record.seq = record.seq.replace('-', '')
-                    SeqIO.write(record, f, "fasta")
+                    if subtype in subtypes_to_include or '_' in subtype:
+                        accessions.add(record.id)
+                        record.description = ""
+                        record.seq = record.seq.replace('-', '')
+                        SeqIO.write(record, f, "fasta")
 
 rule align:
     message: """aligning sequences to the reference using nextclade v3"""
@@ -105,8 +106,14 @@ rule make_metadata:
                     print(entries)
                     continue
                 datum = {k: entries[v] if type(v)==int else '.'.join(entries[v[0]:v[1]]) for k, v in fields.items()}
-                if datum['subtype'] in subtypes_to_exclude:
+                subtype = datum['subtype']
+                if subtype in subtypes_to_exclude:
                     continue
+
+                if '_' in subtype:
+                    datum['subtype'] = 'CRF'+subtype
+                elif subtype not in subtypes_to_include:
+                    datum['subtype'] = 'other'
                 try:
                     if datum['date']< '30':
                         datum['date'] = 2000 + int(datum['date'])
@@ -121,7 +128,8 @@ rule make_metadata:
         pd.DataFrame(metadata).to_csv(output[0], sep='\t', index=False)
 
 max_count = 50
-min_count = 5
+max_count_other = 200
+min_count = 3
 rule split_by_subtype:
     input:
         alignment = "results/masked.fasta",
@@ -148,9 +156,14 @@ rule split_by_subtype:
         others = open("results/subtype_alignments/other.fasta", "w")
         for subtype, seqs in alignments_by_subtype.items():
             shuffle(seqs)
-            if len(seqs)<min_count:
-                SeqIO.write(seqs[0], others, "fasta")
+            if subtype=='other':
+                SeqIO.write(seqs[:max_count_other], others, "fasta")
                 continue
+
+            if len(seqs)<min_count:
+                if len(seqs)<3 or (subtype not in subtypes_to_include):
+                    SeqIO.write(seqs[:3], others, "fasta")
+                    continue
 
             with open(output.alignments + f"/{subtype}.fasta", "w") as f:
                 if len(seqs)<max_count:
@@ -251,9 +264,11 @@ rule clades:
         metadata = "results/metadata.tsv"
     output:
         "results/clades.json"
+    params:
+        min_count = min_count
     shell:
         """
-        python3 scripts/assign_clades.py --tree {input.tree} --metadata {input.metadata} --output {output}
+        python3 scripts/assign_clades.py --tree {input.tree} --metadata {input.metadata} --output {output} --min-count {params.min_count}
         """
 
 
@@ -320,4 +335,17 @@ rule clean:
         """
         rm -rf results
         rm -r dataset/tree.json
+        """
+
+rule validate:
+    input:
+        tree = "dataset/tree.json",
+        metadata = "results/metadata.tsv",
+        sequences = "data/sequences_renamed.fasta"
+    output:
+        res = "results/validation.tsv"
+    shell:
+        """
+        nextclade run -D dataset {input.sequences} --output-tsv {output.res}
+        python3 scripts/validate.py --metadata {input.metadata} --result {output.res}
         """
