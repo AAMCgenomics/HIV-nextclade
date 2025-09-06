@@ -122,7 +122,7 @@ rule make_metadata:
                 except:
                     datum['date'] = None
                 try:
-                    if datum['country'] = 'PA' :
+                    if datum['country'] == 'PA' :
                         datum['Origin'] = 'Panama'
                     else:
                         datum['Origin'] = 'Others'
