@@ -90,7 +90,7 @@ rule mask_for_tree:
 rule make_metadata:
     message: """pull metadata from description of sequences"""
     input:
-        "data/HIV1_SFL_2021_genome_DNA.fasta"
+        "data/sequences.fasta"
     output:
         "results/metadata.tsv"
     run:
@@ -126,7 +126,8 @@ rule make_metadata:
                         datum['Origin'] = 'Panama'
                     else:
                         datum['Origin'] = 'Others'
-                except datum['Origin'] = None
+                except:
+                    datum['Origin'] = None
                 if datum['strain'] in accessions:
                     continue
                 accessions.add(datum['strain'])
