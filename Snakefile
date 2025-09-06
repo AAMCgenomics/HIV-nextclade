@@ -125,7 +125,7 @@ rule make_metadata:
                     if datum['country'] == 'PA' :
                         datum['Origin'] = 'Panama'
                     else:
-                        datum['Origin'] = 'Others'
+                        datum['Origin'] = 'Other'
                 except:
                     datum['Origin'] = None
                 if datum['strain'] in accessions:

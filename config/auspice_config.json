@@ -1,8 +1,8 @@
 {
-  "title": "Nextclade dataset for HIV-1 subtypes",
-  "build_url": "https://github.com/neherlab/nextclade_data_workflows",
+  "title": "Genomics surveillance using nextclade with Panama Focus",
+  "build_url": "https://github.com/AAMCGenomics",
   "maintainers": [
-    { "name": "Richard Neher", "url": "https://neherlab.org" }
+    { "name": "Alexander A. Martinez C", "url": "https://neherlab.org" }
   ],
   "data_provenance": [
     {
@@ -24,6 +24,7 @@
   "filters": [
     "country",
     "clade_membership",
+    "Origin",
     "LANL_subtype"
   ],
   "display_defaults": {
