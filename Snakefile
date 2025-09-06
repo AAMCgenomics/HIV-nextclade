@@ -30,7 +30,7 @@ subtypes_to_include = ['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'B', 'C', 'D', 
 rule name_by_accession:
     message: """renaming sequences by accession"""
     input:
-        sequences=["data/HIV1_SFL_2021_genome_DNA.fasta"],
+        sequences=["data/sequences.fasta"],
         exclude = "config/exclude.txt"
     output:
         "data/sequences_renamed.fasta"
