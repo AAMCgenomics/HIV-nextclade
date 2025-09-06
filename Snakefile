@@ -96,8 +96,8 @@ rule make_metadata:
     run:
         from Bio import SeqIO
         import pandas as pd
-        metadata = [{'strain':'NC_001802','subtype':'B', 'country':'FR', 'date':1983, 'accession':'NC_001802', 'name':"HXB2_reference"}]
-        fields = {'strain': -1, 'subtype': 0, 'country': 1, 'date': 2, 'accession': -1,  'name': [3, -1]}
+        metadata = [{'strain':'NC_001802','subtype':'B', 'country':'FR', 'date':1983, 'accession':'NC_001802', 'name':"HXB2_reference", 'Origin':"Other"}]
+        fields = {'strain': -1, 'subtype': 0, 'country': 1, 'date': 2, 'accession': -1,  'name': [3, -1], 'country': 1}
         accessions = {metadata[0]['strain']}
         for fname in input:
             for record in SeqIO.parse(fname, "fasta"):
@@ -121,6 +121,12 @@ rule make_metadata:
                         datum['date'] = 1900 + int(datum['date'])
                 except:
                     datum['date'] = None
+                try:
+                    if datum['country'] = 'PA' :
+                        datum['Origin'] = 'Panama'
+                    else:
+                        datum['Origin'] = 'Others'
+                except datum['Origin'] = None
                 if datum['strain'] in accessions:
                     continue
                 accessions.add(datum['strain'])
