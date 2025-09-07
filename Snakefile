@@ -134,8 +134,8 @@ rule make_metadata:
                 metadata.append(datum)
         pd.DataFrame(metadata).to_csv(output[0], sep='\t', index=False)
 
-max_count = 50
-max_count_other = 200
+max_count = 500
+max_count_other = 2000
 min_count = 3
 rule split_by_subtype:
     input:
@@ -315,8 +315,8 @@ rule add_metadata:
         nodes = {}
         for node in T.get_terminals():
             nodes[node.name] = {k1:metadata.get(node.name)[k2] for k1,k2 in 
-                                zip(['country', 'date', 'LANL_subtype', 'Strain_name'], 
-                                    ['country', 'date', 'subtype', 'name'])}
+                                zip(['country', 'date', 'LANL_subtype', 'Strain_name','Origin'], 
+                                    ['country', 'date', 'subtype', 'name','Origin'])}
         with open(output[0], "w") as f:
             json.dump({"nodes":nodes}, f)
 

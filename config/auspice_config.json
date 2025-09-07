@@ -16,6 +16,11 @@
       "type": "categorical"
     },
     {
+      "key": "Origin",
+      "title": "Origen",
+      "type": "categorical"
+    },      
+    {
       "key": "date",
       "title": "Sample Date",
       "type": "ordinal"
