@@ -369,21 +369,3 @@ rule clean:
         """
         rm -rf results data/sequences.fasta data/sequences_renamed.fasta dataset
         """
-
-rule download:
-    """
-    Downloading sequences and metadata from data.nextstrain.org
-    """
-    output:
-        sequences="data/sequences.fasta"
-    params:
-        sequences_url="https://drive.usercontent.google.com/download?id=1xK_0kTfgW_UgNIYqAnHg1eIqt7nGWC0Y&export=download&authuser=0"
-    log:
-        "logs/download.txt",
-    benchmark:
-        "benchmarks/download.txt"
-    shell:
-        r"""
-        exec &> >(tee {log:q})
-        curl -fsSL --compressed {params.sequences_url:q} --output {output.sequences:q}
-        """
